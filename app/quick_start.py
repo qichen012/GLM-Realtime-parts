@@ -13,14 +13,14 @@ GLM-Realtime + Memobase 集成脚本
 import os
 import json
 import threading
-from save_to_mem import (
-    MemoBaseClient, 
-    ChatBlob, 
+from memory.save_to_mem import (
+    MemoBaseClient,
+    ChatBlob,
     BlobType,
     ACCESS_TOKEN,
     MEMOBASE_URL,
     USER_ID,
-    PROGRESS_FILE
+    PROGRESS_FILE,
 )
 
 # 导入 realtime.py 的必要模块（但不直接运行它）
