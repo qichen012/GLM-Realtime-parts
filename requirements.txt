@@ -1,0 +1,27 @@
+# GLM-Realtime 语音助手依赖
+
+# 核心依赖
+websocket-client>=1.6.0    # WebSocket 通信
+sounddevice>=0.4.6         # 音频输入输出
+numpy>=1.24.0              # 数值计算
+PyJWT>=2.8.0               # JWT Token 生成
+python-dotenv>=1.0.0       # 环境变量管理
+requests>=2.31.0           # HTTP 请求
+
+# 语音功能
+pyttsx3>=2.90              # 本地 TTS
+
+# 打断功能（新增）
+pynput>=1.7.6              # 键盘监听
+
+# 本地语音处理（VAD 等）
+webrtcvad>=2.0.10
+
+# WebSocket 异步库（用于 03_voice_client.py）
+websockets>=10.0          # 异步 WebSocket 客户端
+
+# Memobase 记忆管理依赖
+pydantic>=2.0.0           # 数据验证
+httpx>=0.24.0             # HTTP 客户端
+openai>=1.0.0             # OpenAI API 客户端
+
