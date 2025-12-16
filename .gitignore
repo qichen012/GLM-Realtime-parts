@@ -92,7 +92,7 @@ ehthumbs.db
 Thumbs.db
 
 # 环境变量
-
+.env
 
 # 日志文件
 *.log
