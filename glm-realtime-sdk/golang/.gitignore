@@ -1,0 +1,10 @@
+# MacOS
+.DS_Store
+
+# Env files
+.env
+.idea/
+
+# Output files
+*.Output
+*.wav
