@@ -65,15 +65,29 @@ gpt-realtime-demo/
 │   ├── test_memory_integration.py   # 记忆测试
 │   └── test_*.py                    # 其他测试
 │
-├── docs/                       # 文档
-│   ├── REALTIME_SYNC_GUIDE.md # 🔑 实时同步指南（方案3）⭐ 最新
-│   ├── INTERRUPT_GUIDE.md     # 智能打断指南
-│   ├── AGENT_INTEGRATION.md   # Agent 集成指南
-│   ├── MEMORY_INTEGRATION.md  # 记忆集成指南
-│   ├── AUTO_SYNC_GUIDE.md     # 容错同步指南
-│   ├── QUICK_START_AGENT.md   # 快速开始
-│   ├── USAGE.md               # 使用说明
-│   └── VOICE_CONFIG.md        # 语音配置
+├── docs/                       # 📚 文档目录
+│   ├── quickstart/            # 🚀 快速开始
+│   │   ├── QUICK_START_AGENT.md
+│   │   └── CLIENT_VAD_GUIDE.md
+│   ├── guides/                # 📖 使用指南
+│   │   ├── SPACEBAR_TRIGGER_GUIDE.md
+│   │   ├── MANUAL_TRIGGER_GUIDE.md
+│   │   ├── INTERRUPT_GUIDE.md
+│   │   ├── VOICE_CONFIG.md
+│   │   └── USAGE.md
+│   ├── integration/           # 🔧 集成指南
+│   │   ├── AGENT_INTEGRATION.md
+│   │   ├── MEMORY_INTEGRATION.md
+│   │   ├── AUTO_SYNC_GUIDE.md
+│   │   └── REALTIME_SYNC_GUIDE.md
+│   ├── troubleshooting/       # 🔍 故障排查
+│   │   ├── AUDIO_TROUBLESHOOTING.md
+│   │   ├── BLUETOOTH_FIX.md
+│   │   └── DEBUG_GUIDE.md
+│   └── archive/               # 📦 归档文档
+│       ├── INTERRUPT_FEATURE_COMPLETE.md
+│       ├── REALTIME_SYNC_COMPLETE.md
+│       └── REORGANIZATION_COMPLETE.md
 │
 ├── data/                       # 数据文件
 │   ├── save_data.jsonl
@@ -207,14 +221,27 @@ cd memory && python save_to_mem.py
 
 ## 📖 详细文档
 
-- [🚀 实时同步指南](docs/REALTIME_SYNC_GUIDE.md) - 实时同步 + 容错备份（方案3）⭐⭐⭐ 最新
-- [💬 智能打断指南](docs/INTERRUPT_GUIDE.md) - VAD 优化 + Enter 键打断
-- [🤖 Agent 集成指南](docs/AGENT_INTEGRATION.md) - 如何集成 Claude Code Agent
-- [🧠 记忆集成指南](docs/MEMORY_INTEGRATION.md) - 如何使用 Memobase 记忆
-- [🛡️ 容错同步指南](docs/AUTO_SYNC_GUIDE.md) - 容错备份守护进程
-- [⚡ 快速开始](docs/QUICK_START_AGENT.md) - Agent 功能快速上手
-- [📚 使用说明](docs/USAGE.md) - 完整使用手册
-- [🔊 语音配置](docs/VOICE_CONFIG.md) - 语音参数调优
+### 🚀 快速开始
+- [Agent 快速上手](docs/quickstart/QUICK_START_AGENT.md) - Agent 功能快速开始
+- [Client VAD 指南](docs/quickstart/CLIENT_VAD_GUIDE.md) - 客户端 VAD 使用
+
+### 📖 使用指南
+- [空格键触发指南](docs/guides/SPACEBAR_TRIGGER_GUIDE.md) - 手动触发语音结束
+- [手动触发指南](docs/guides/MANUAL_TRIGGER_GUIDE.md) - 手动触发机制说明
+- [智能打断指南](docs/guides/INTERRUPT_GUIDE.md) - VAD 优化 + Enter 键打断 ⭐
+- [语音配置指南](docs/guides/VOICE_CONFIG.md) - 语音参数调优
+- [完整使用手册](docs/guides/USAGE.md) - 详细使用说明
+
+### 🔧 集成指南
+- [实时同步指南](docs/integration/REALTIME_SYNC_GUIDE.md) - 实时同步 + 容错备份（方案3）⭐⭐⭐
+- [Agent 集成指南](docs/integration/AGENT_INTEGRATION.md) - 如何集成 Claude Code Agent
+- [记忆集成指南](docs/integration/MEMORY_INTEGRATION.md) - 如何使用 Memobase 记忆
+- [容错同步指南](docs/integration/AUTO_SYNC_GUIDE.md) - 容错备份守护进程
+
+### 🔍 故障排查
+- [音频故障排查](docs/troubleshooting/AUDIO_TROUBLESHOOTING.md) - 音频相关问题解决
+- [蓝牙问题修复](docs/troubleshooting/BLUETOOTH_FIX.md) - 蓝牙音频设备问题
+- [调试指南](docs/troubleshooting/DEBUG_GUIDE.md) - 系统调试方法
 
 ## ⚙️ 配置
 

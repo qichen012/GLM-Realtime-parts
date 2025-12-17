@@ -76,7 +76,8 @@ CHUNK = 1024
 CHUNK_DURATION = CHUNK / SAMPLE_RATE  # 0.064 秒
 
 # 本地语音处理器（VAD + 预留降噪）
-voice_processor = SimpleMyVoiceProcessor(sample_rate=SAMPLE_RATE)
+# vad_aggressiveness: 调整为2，平衡过滤噪音和保留语音
+voice_processor = SimpleMyVoiceProcessor(sample_rate=SAMPLE_RATE, vad_aggressiveness=2)
 
 audio_queue = queue.Queue()
 session_ready = threading.Event()
@@ -95,6 +96,14 @@ audio_played_in_response = False  # 标记当前响应是否已播放音频
 ai_is_responding = False
 ai_response_lock = threading.Lock()
 ws_global = None  # 全局 WebSocket 对象，用于打断功能
+
+# 🔑 手动触发功能（空格键完成说话）
+manual_trigger_flag = threading.Event()
+last_manual_trigger_time = 0  # 防止连续触发
+
+# 🔑 音频输入流控制（用于播放时暂停录音）
+audio_input_stream = None
+input_stream_lock = threading.Lock()
 
 # --- 打断功能相关函数 ---
 
@@ -167,6 +176,26 @@ def keyboard_listener_thread():
         listener.join()
 
 
+def manual_trigger_listener_thread():
+    """手动触发监听线程 - 监听空格键以完成说话"""
+    
+    def on_press(key):
+        try:
+            # 检测空格键
+            if key == keyboard.Key.space:
+                if not ai_is_responding:  # 只在非 AI 回复时允许触发
+                    print("\n⏸️  [用户按下空格] 完成说话，请求 AI 回复...")
+                    manual_trigger_flag.set()
+        except AttributeError:
+            pass
+    
+    print("⌨️  手动触发监听已启动 (按空格键=完成说话)")
+    
+    # 启动监听器
+    with keyboard.Listener(on_press=on_press) as listener:
+        listener.join()
+
+
 # --- 核心函数 ---
 
 def pcm_to_wav_base64(pcm_data: np.ndarray, sample_rate: int = 16000) -> str:
@@ -207,46 +236,69 @@ def callback(indata, frames, time_info, status):
     if status:
         print("Microphone Warning:", status, file=sys.stderr)
     
-    volume_norm = np.linalg.norm(indata) * 10 
-    
-    if volume_norm > 0.5:
-        print(f"🔊 Sound Detected (Level: {volume_norm:.1f})", end='\r', file=sys.stdout, flush=True)
-        last_audio_time = time.time()
-        is_speaking = True
-
     # 如果已经在停止流程中，直接返回
     if stop_event.is_set():
         return
+    
+    # 🔑 完全依赖 Server VAD，本地只做最基础的音量显示
+    volume_norm = np.linalg.norm(indata) * 10 
+    
+    # 只有超高音量才显示（避免刷屏）
+    if volume_norm > 100000:
+        print(f"🔊 Speaking... (Level: {volume_norm:.0f})", end='\r', file=sys.stdout, flush=True)
 
-    # 先经过本地语音处理器（VAD + 预留降噪）
-    processed = voice_processor.process(indata)
-    if processed is not None:
-        audio_queue.put(processed.copy())
+    # 🔑 关键修复：完全不使用本地 VAD，直接发送所有音频
+    # 让 Server VAD 来决定什么是语音，什么是噪音
+    audio_queue.put(indata.copy())
 
 def send_audio_loop(ws):
     """
-    优化版音频发送：
+    简化版音频发送：
     1. 使用速率限制器，确保不超过 50 QPS
     2. 批量累积音频，减少请求次数
-    3. 智能检测静音并触发响应
+    3. 完全依赖 Server VAD 检测语音开始和结束
+    4. 支持空格键手动触发完成说话
     """
-    global is_speaking, last_audio_time
+    global is_speaking, last_audio_time, last_manual_trigger_time
     
     session_ready.wait()
     print("🎤 Session ready, starting to send audio stream")
+    print("💡 完全依赖 Server VAD 进行语音检测")
+    print("💡 按空格键可手动完成说话并请求回复\n")
     
-    # 速率限制配置
-    MAX_QPS = 45  
-    MIN_INTERVAL = 1.0 / MAX_QPS  # 每次请求最小间隔 ≈ 0.022秒
+    # 速率限制配置（降低发送频率，避免超过 API 限制）
+    MAX_QPS = 20  # 🔑 降低到 20 QPS，留有余量
+    MIN_INTERVAL = 1.0 / MAX_QPS  # 每次请求最小间隔 ≈ 0.05秒
     
     # 批量发送配置
-    BATCH_SIZE = 8  # 每次累积8个chunk (8 * 64ms = 512ms 音频)
-    SILENCE_THRESHOLD = 1.5  # 静音1.5秒触发响应
+    BATCH_SIZE = 16  # 🔑 增加批量大小，减少请求次数 (16 * 64ms ≈ 1秒音频)
     
     audio_batch = []
     last_send_time = 0
     
     while not stop_event.is_set():
+        # 🔑 首先检查手动触发（在循环开始就检查，不管队列状态）
+        if manual_trigger_flag.is_set() and (time.time() - last_manual_trigger_time) > 1:
+            print("\n🚀 [手动触发] 清空音频缓冲并请求响应...")
+            
+            # 清空所有待发送的音频
+            while not audio_queue.empty():
+                try:
+                    audio_queue.get_nowait()
+                    audio_queue.task_done()
+                except queue.Empty:
+                    break
+            
+            # 提交音频缓冲并请求响应
+            ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+            time.sleep(0.1)
+            ws.send(json.dumps({"type": "response.create"}))
+            
+            print("   ✅ 已手动触发，等待 AI 回复...")
+            manual_trigger_flag.clear()  # 清除标志
+            last_manual_trigger_time = time.time()  # 重置时间，防止连续触发
+            continue  # 继续循环，等待响应
+        
         try:
             chunk = audio_queue.get(timeout=0.05)
             audio_batch.append(chunk)
@@ -278,46 +330,8 @@ def send_audio_loop(ws):
                         pass
 
         except queue.Empty:
-            # 检测静音并触发响应
-            if is_speaking and (time.time() - last_audio_time) > SILENCE_THRESHOLD:
-                print("\n⏸️  Detected silence, committing audio and requesting response...")
-                
-                # 发送剩余的音频（包装成 WAV 格式）
-                if audio_batch:
-                    # 满足速率限制
-                    time_since_last_send = time.time() - last_send_time
-                    if time_since_last_send < MIN_INTERVAL:
-                        time.sleep(MIN_INTERVAL - time_since_last_send)
-                    
-                    combined_audio = np.concatenate(audio_batch)
-                    audio_base64 = pcm_to_wav_base64(combined_audio, SAMPLE_RATE)
-                    ws.send(json.dumps({
-                        "type": "input_audio_buffer.append",
-                        "audio": audio_base64
-                    }))
-                    audio_batch.clear()
-                    last_send_time = time.time()
-                
-                # 短暂等待，然后commit
-                time.sleep(MIN_INTERVAL)
-                ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                
-                # 再等待一下，然后请求响应
-                time.sleep(MIN_INTERVAL)
-                response_request = {
-                    "type": "response.create",
-                    "response": {
-                        "modalities": ["audio", "text"],
-                        "instructions": "请用语音回复"
-                    }
-                }
-                print(f"📤 Sending response request: {json.dumps(response_request, ensure_ascii=False)}")
-                ws.send(json.dumps(response_request))
-                
-                is_speaking = False
-                last_send_time = time.time()
-                print("📤 Response creation requested")
-            
+            # 🔑 完全依赖 Server VAD，不做本地静音检测
+            # Server VAD 会自动检测 speech_started 和 speech_stopped
             continue
         
         except Exception as e:
@@ -401,23 +415,58 @@ def on_message(ws, message):
                     original_duration = len(full_audio)/SAMPLE_RATE
                     print(f"   Total samples: {len(full_audio)}, original duration: {original_duration:.2f}s")
                     
-                    # 增加音量（如果太小）
+                    # 🔊 音量分析和增强
                     max_val = np.abs(full_audio).max()
+                    mean_val = np.abs(full_audio).mean()
+                    print(f"   📊 音频数据: max={max_val}, mean={mean_val:.0f}")
+                    
                     if max_val > 0:
-                        if max_val < 10000:
-                            volume_boost = 10000 / max_val
+                        # 🔑 强制增强音量（针对蓝牙耳机）
+                        TARGET_MAX = 32000  # 🔧 修改：提高目标音量（从20000改为32000）
+                        if max_val < TARGET_MAX:
+                            volume_boost = TARGET_MAX / max_val
+                            # 限制最大增益，避免削波
+                            volume_boost = min(volume_boost, 5.0)
                             full_audio = (full_audio * volume_boost).astype(np.int16)
-                            print(f"   🔊 Volume boosted by {volume_boost:.2f}x")
+                            print(f"   🔊 音量增强: {volume_boost:.2f}x (max: {max_val} → {np.abs(full_audio).max()})")
+                        else:
+                            print(f"   🔊 音量正常: {max_val}")
+                        
+                        # 🔧 修改：强制额外放大
+                        full_audio = (full_audio * 2.0).astype(np.int16)
+                        print(f"   🔊 强制额外放大: 2.0x，最终峰值: {np.abs(full_audio).max()}")
                         
                         # 🚀 加速播放
-                        SPEED_MULTIPLIER = 1.5  # 调整播放速度（推荐 1.3-1.8）
+                        SPEED_MULTIPLIER = 1.5  # 1.5倍速播放（更快响应）
                         playback_rate = int(SAMPLE_RATE * SPEED_MULTIPLIER)
                         adjusted_duration = len(full_audio) / playback_rate
                         
-                        print(f"   ⚡ Speed: {SPEED_MULTIPLIER}x, playback duration: {adjusted_duration:.2f}s")
-                        print(f"   ▶️  Playing...")
-                        sd.play(full_audio, samplerate=playback_rate, blocking=True)
-                        print("   ✅ Playback complete!")
+                        # 🔑 检查并显示当前输出设备
+                        current_device = sd.query_devices(kind='output')
+                        print(f"   🔈 输出设备: {current_device['name']}")
+                        print(f"   ⚡ 播放速度: {SPEED_MULTIPLIER}x")
+                        print(f"   ⏱️  时长: {adjusted_duration:.2f}秒")
+                        print(f"   ▶️  开始播放...")
+                        
+                        # 🔑 关键修复：播放前停止麦克风录音（避免蓝牙设备冲突）
+                        global audio_input_stream
+                        stream_was_active = False
+                        with input_stream_lock:
+                            if audio_input_stream and audio_input_stream.active:
+                                print("   🎙️  暂停麦克风录音...")
+                                audio_input_stream.stop()
+                                stream_was_active = True
+                        
+                        try:
+                            sd.play(full_audio, samplerate=playback_rate, blocking=True)
+                            print("   ✅ 播放完成！")
+                        finally:
+                            # 播放完成后恢复麦克风录音
+                            if stream_was_active:
+                                with input_stream_lock:
+                                    if audio_input_stream:
+                                        print("   🎙️  恢复麦克风录音...")
+                                        audio_input_stream.start()
                         
                         # 🔑 标记已播放音频，不需要本地TTS了
                         audio_played_in_response = True
@@ -491,31 +540,44 @@ def on_message(ws, message):
         print("✅ Audio buffer committed")
         
     elif msg_type == "input_audio_buffer.speech_started":
-        print("\n🎤 Speech detected by server VAD")
+        print("\n🎤 [Server VAD] 检测到语音开始")
         
     elif msg_type == "input_audio_buffer.speech_stopped":
-        print("⏸️  Speech ended (detected by server VAD)")
+        print("\n⏸️  [Server VAD] 检测到语音结束")
+        print("   ⏳ 等待 AI 生成回复...")
         
     elif msg_type in ("session.error", "error"):
         error_info = data.get('error', {})
         error_code = error_info.get('code', '')
         
-        # 只显示非速率限制的错误，速率限制错误太多会刷屏
-        if error_code != 'rate_limit_error':
+        # 🔑 显示所有错误信息，包括速率限制（改为计数显示）
+        if error_code == 'rate_limit_error':
+            # 速率限制错误使用计数器，避免刷屏
+            if not hasattr(on_message, 'rate_limit_count'):
+                on_message.rate_limit_count = 0
+            on_message.rate_limit_count += 1
+            if on_message.rate_limit_count % 10 == 1:  # 每10次显示一次
+                print(f"⚠️  速率限制警告 (已发生 {on_message.rate_limit_count} 次)")
+        else:
             print(f"❌ Error: {error_info.get('message', data)}")
+            print(f"   错误详情: {json.dumps(data, ensure_ascii=False, indent=2)}")
         
     elif msg_type == "heartbeat":
         pass
+        
+    elif msg_type == "response.created":
+        # 显示 AI 开始生成回复
+        print("\n🤖 AI 开始生成回复...")
         
     elif msg_type in ("rate_limits.updated", "conversation.created", "conversation.updated"):
         # 静默处理这些常见消息
         pass
         
     else:
-        # 只打印真正未知的消息类型
-# <--- 修改点：打印所有我们未知的消息的 完整内容！ --->
+        # 🔑 打印所有未知消息类型的完整内容，方便调试
         if not msg_type.startswith(("response.", "input_audio_buffer.")):
-            print(f"💡 Message: {msg_type}")
+            print(f"💡 Unknown Message: {msg_type}")
+            print(f"   完整内容: {json.dumps(data, ensure_ascii=False, indent=2)}")
 
 
 def on_open(ws):
@@ -528,24 +590,28 @@ def on_open(ws):
             "output_audio_format": "pcm",
             "turn_detection": {
                 "type": "server_vad",
-                "threshold": 0.5,              # 音量阈值 (0.0-1.0)
+                "threshold": 0.5,              # 🔑 降低阈值，更容易检测到语音
                 "prefix_padding_ms": 300,      # 说话前缓冲 (毫秒)
-                "silence_duration_ms": 2000    # 🔑 静默2秒才判定说完 (毫秒)
+                "silence_duration_ms": 700     # 🔑 0.7秒静音即可触发，更灵敏
             },
             "input_audio_transcription": {
                 "enabled": True
             },
             "temperature": 0.8,  # 自然度
             "modalities": ["audio", "text"],
+            "voice": "female-sweet",  # 🔑 甜美女声
             "beta_fields": {
                "chat_mode": "audio",
                "tts_source": "e2e",  # 端到端语音合成
-               "auto_search": False
-               # 注意：speed 参数不生效，使用客户端播放加速
+               "auto_search": False,
+               "voice": "female-sweet"  # 🔑 甜美女声
            }
         }
     }
-    print(f"📤 Session config: {json.dumps(session_config, ensure_ascii=False, indent=2)}")
+    print(f"📤 Session config:")
+    print(f"   - Server VAD: threshold=0.5, silence=700ms")
+    print(f"   - Voice: female-sweet (甜美女声)")
+    print(f"   - Speed: 1.5x (客户端播放时调整)")
     ws.send(json.dumps(session_config))
     time.sleep(0.5)
     threading.Thread(target=send_audio_loop, args=(ws,), daemon=True).start()
@@ -620,6 +686,9 @@ if __name__ == "__main__":
     
     # 🔑 启动键盘监听线程（用于打断功能）
     threading.Thread(target=keyboard_listener_thread, daemon=True).start()
+    
+    # 🔑 启动手动触发监听线程（空格键完成说话）
+    threading.Thread(target=manual_trigger_listener_thread, daemon=True).start()
 
     websocket.enableTrace(False)
     
@@ -649,8 +718,23 @@ if __name__ == "__main__":
         print("🎤 [正在听...] Ready! Start speaking...")
         print("💡 提示: AI 回复时按 Enter 键可打断并继续说话\n")
         
-        with sd.InputStream(channels=1, samplerate=SAMPLE_RATE, dtype='int16', callback=callback):
+        # 🔑 创建音频输入流并保存全局引用（用于播放时暂停）
+        # 在 if __name__ == "__main__" 块中，通过 globals() 修改全局变量
+        input_stream = sd.InputStream(
+            channels=1, 
+            samplerate=SAMPLE_RATE, 
+            dtype='int16', 
+            callback=callback
+        )
+        globals()['audio_input_stream'] = input_stream
+        input_stream.start()
+        
+        try:
             ws_thread.join()
+        finally:
+            if input_stream:
+                input_stream.stop()
+                input_stream.close()
 
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user")

@@ -1,0 +1,170 @@
+{
+  "test_cases": [
+    {
+      "name": "规划北京3天游",
+      "function": "plan_trip",
+      "arguments": {
+        "destination": "北京",
+        "start_date": "2024-01-15",
+        "end_date": "2024-01-18",
+        "preferences": "文化景点",
+        "budget": "中等"
+      },
+      "expected_result": {
+        "success": true,
+        "has_itinerary": true
+      }
+    },
+    {
+      "name": "订北京到上海的火车票",
+      "function": "book_ticket",
+      "arguments": {
+        "ticket_type": "train",
+        "departure_city": "北京",
+        "arrival_city": "上海",
+        "departure_date": "2024-01-20",
+        "passenger_count": 2,
+        "seat_class": "二等座"
+      },
+      "expected_result": {
+        "success": true,
+        "has_tickets": true
+      }
+    },
+    {
+      "name": "订上海酒店",
+      "function": "book_hotel",
+      "arguments": {
+        "city": "上海",
+        "check_in_date": "2024-01-20",
+        "check_out_date": "2024-01-23",
+        "room_count": 1,
+        "guest_count": 2,
+        "hotel_type": "四星",
+        "preferences": "靠近市中心，有早餐"
+      },
+      "expected_result": {
+        "success": true,
+        "has_hotels": true
+      }
+    },
+    {
+      "name": "规划杭州周末游",
+      "function": "plan_trip",
+      "arguments": {
+        "destination": "杭州",
+        "start_date": "2024-02-03",
+        "end_date": "2024-02-04",
+        "preferences": "自然风光"
+      },
+      "expected_result": {
+        "success": true,
+        "has_itinerary": true
+      }
+    },
+    {
+      "name": "订飞机票",
+      "function": "book_ticket",
+      "arguments": {
+        "ticket_type": "flight",
+        "departure_city": "北京",
+        "arrival_city": "广州",
+        "departure_date": "2024-03-01",
+        "passenger_count": 1,
+        "seat_class": "经济舱"
+      },
+      "expected_result": {
+        "success": true,
+        "has_tickets": true
+      }
+    }
+  ],
+  "error_test_cases": [
+    {
+      "name": "缺少必需参数",
+      "function": "plan_trip",
+      "arguments": {
+        "destination": "北京"
+      },
+      "expected_result": {
+        "success": false,
+        "has_error": true
+      }
+    },
+    {
+      "name": "无效的函数名",
+      "function": "invalid_function",
+      "arguments": {},
+      "expected_result": {
+        "success": false,
+        "has_error": true
+      }
+    },
+    {
+      "name": "无效的 ticket_type",
+      "function": "book_ticket",
+      "arguments": {
+        "ticket_type": "submarine",
+        "departure_city": "北京",
+        "arrival_city": "上海",
+        "departure_date": "2024-01-20",
+        "passenger_count": 1
+      },
+      "expected_result": {
+        "success": false,
+        "has_error": true
+      }
+    }
+  ],
+  "mock_responses": {
+    "plan_trip": {
+      "success": true,
+      "itinerary": [
+        "Day 1: 天安门广场、故宫博物院",
+        "Day 2: 八达岭长城、明十三陵",
+        "Day 3: 颐和园、圆明园遗址"
+      ],
+      "summary": "北京3天文化深度游",
+      "estimated_cost": 3500,
+      "tips": [
+        "建议提前预约故宫门票",
+        "长城建议早上出发",
+        "带好防晒用品"
+      ]
+    },
+    "book_ticket": {
+      "success": true,
+      "tickets": [
+        {
+          "type": "高铁",
+          "train_no": "G101",
+          "departure_time": "08:00",
+          "arrival_time": "12:30",
+          "seat": "二等座 05车 12A",
+          "price": 553
+        }
+      ],
+      "total_price": 1106,
+      "booking_reference": "TEST-TK-20240120-001",
+      "payment_deadline": "2024-01-19 23:59:59"
+    },
+    "book_hotel": {
+      "success": true,
+      "hotels": [
+        {
+          "name": "上海外滩华尔道夫酒店",
+          "star": 5,
+          "address": "上海市黄浦区中山东一路2号",
+          "room_type": "豪华大床房",
+          "price_per_night": 1200,
+          "total_nights": 3
+        }
+      ],
+      "total_price": 3600,
+      "booking_reference": "TEST-HT-20240120-001",
+      "amenities": ["免费WiFi", "含早餐", "健身房", "游泳池"],
+      "cancellation_policy": "入住前24小时可免费取消"
+    }
+  }
+}
+

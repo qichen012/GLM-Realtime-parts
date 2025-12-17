@@ -247,7 +247,7 @@ def send_audio_in_chunks(ws):
             print(f"📤 已发送: {i}/{total_packets}", end='\r')
             time.sleep(packet_ms / 1000)  # 等待 100ms
         
-        print(f"\n✅ 音频分帧发送完成")
+        print(f"\n✅ 音频分帧发送完成 (文件已包含静默尾部)")
         
     except Exception as e:
         print(f"❌ 分帧发送失败: {e}")
@@ -266,13 +266,20 @@ def on_open(ws):
         "session": {
             "input_audio_format": "wav",
             "output_audio_format": "pcm",
-            "turn_detection": {"type": "server_vad"},
+            "turn_detection": {
+                "type": "server_vad",
+                "threshold": 0.5,              # 使用默认阈值，对录制文件友好
+                "silence_duration_ms": 800,    # 静默0.8秒判定说完（加快响应）
+                "prefix_padding_ms": 300
+            },
             "input_audio_transcription": {"enabled": True},
             "modalities": ["audio", "text"],
             "temperature": 0.8,  # 自然度
             "beta_fields": {
                 "chat_mode": "audio",
                 "tts_source": "e2e",  # 端到端语音合成
+                "lang": "zh-cn",
+                "accent": "mandarin",
                 "auto_search": False
                 # 注意：speed 参数不生效，使用客户端播放加速
             }
@@ -290,9 +297,9 @@ def on_open(ws):
     print("\n📤 开始分帧发送音频...")
     send_audio_in_chunks(ws)
     
-    # Server VAD 模式下，不需要手动 commit 和 create response
-    # 服务器会自动检测语音并触发响应
-    print("\n⏳ 等待服务器 VAD 检测并响应...\n")
+    # Server VAD 模式下不需要手动操作，服务器会自动检测并响应
+    print("\n⏳ 等待服务器 VAD 检测并响应...")
+    print("💡 提示：Server VAD 会自动检测语音结束并触发响应，无需手动提交\n")
 
 
 def on_close(ws, close_status_code, close_msg):

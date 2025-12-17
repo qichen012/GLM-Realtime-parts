@@ -110,21 +110,23 @@ def on_open_with_agent(ws):
             "output_audio_format": "pcm",
             "turn_detection": {
                 "type": "server_vad",
-                "threshold": 0.5,              # 音量阈值 (0.0-1.0)
+                "threshold": 0.5,              # 🔑 降低阈值，更容易检测到语音
                 "prefix_padding_ms": 300,      # 说话前缓冲 (毫秒)
-                "silence_duration_ms": 2000    # 🔑 静默2秒才判定说完 (毫秒)
+                "silence_duration_ms": 700     # 🔑 0.7秒静音即可触发，更灵敏
             },
             "input_audio_transcription": {
                 "enabled": True
             },
             "temperature": 0.8,
             "modalities": ["audio", "text"],
+            "voice": "female-sweet",  # 🔑 甜美女声
             "tools": tools,  # 🔑 添加 function call 定义
             "instructions": system_instructions,  # 🔑 添加系统指令（包含记忆）
             "beta_fields": {
                "chat_mode": "audio",
                "tts_source": "e2e",
-               "auto_search": False
+               "auto_search": False,
+               "voice": "female-sweet"  # 🔑 甜美女声
            }
         }
     }
@@ -164,7 +166,6 @@ if __name__ == "__main__":
     print("="*60 + "\n")
 
     # 🔑 方案3：初始化实时同步工作器
-    global sync_worker
     print("🔧 初始化 Memobase 实时同步...")
     try:
         sync_worker = create_sync_worker(CURRENT_USER_ID)
@@ -190,6 +191,9 @@ if __name__ == "__main__":
     print("   • 行程规划（调用 Claude Code Agent）")
     print("   • 订票服务（调用 Claude Code Agent + Skill）")
     print("   • 订酒店（调用 Claude Code Agent + Skill）")
+    print("\n⌨️  快捷键:")
+    print("   • 空格键 = 完成说话，立即请求 AI 回复")
+    print("   • Enter键 = 打断 AI 回复")
     print("\n💡 使用示例:")
     print("   「帮我规划一个去北京的旅行」")
     print("   「我要订一张明天去上海的火车票」")
@@ -201,6 +205,9 @@ if __name__ == "__main__":
     
     # 🔑 启动键盘监听线程（用于打断功能）
     threading.Thread(target=keyboard_listener_thread, daemon=True).start()
+    
+    # 🔑 启动手动触发监听线程（空格键完成说话）
+    threading.Thread(target=manual_trigger_listener_thread, daemon=True).start()
 
     websocket.enableTrace(False)
     
@@ -227,8 +234,23 @@ if __name__ == "__main__":
 
         print("🎤 Ready! Start speaking...\n")
         
-        with sd.InputStream(channels=1, samplerate=SAMPLE_RATE, dtype='int16', callback=callback):
+        # 🔑 创建音频输入流并保存全局引用（用于播放时暂停）
+        # 在主程序中，通过 globals() 修改全局变量
+        input_stream = sd.InputStream(
+            channels=1, 
+            samplerate=SAMPLE_RATE, 
+            dtype='int16', 
+            callback=callback
+        )
+        globals()['audio_input_stream'] = input_stream
+        input_stream.start()
+        
+        try:
             ws_thread.join()
+        finally:
+            if input_stream:
+                input_stream.stop()
+                input_stream.close()
 
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user")
