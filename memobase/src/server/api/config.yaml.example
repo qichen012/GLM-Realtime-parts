@@ -1,13 +1,28 @@
-llm_api_key: YOUR-OPENAI-KEY
+llm_api_key: "your api_key"
+base_url : "https://api.zhizengzeng.com/v1"
 
-# If you use the lstudio embedded provider, you can refer to the configuration below
+project:
+  id: memobase_dev
+  access_token: secret
 
-# embedding_provider: lmstudio
-# embedding_api_key: lm_XXX
-# embedding_model: text-embedding-qwen3-embedding-8b
-# If you start with docker and access lmstudio or 127.0.0.1 via localhost, you can refer to the following base url config
-# embedding_base_url: http://host.docker.internal:1234/v1
-# embedding_base_url: http://127.0.0.1:1234/v1
-# embedding_dim: 4096
+database:
+  user: memobase
+  password: helloworld
+  name: memobase
+  host: memobase-server-db
+  port: 5432
 
-# language: zh
+redis:
+  host: memobase-server-redis
+  port: 6379
+  password: helloworld
+
+embedding_provider: openai
+embedding_api_key: "your api_key"
+embedding_model: qwen3-embedding-8b
+embedding_base_url: https://api.zhizengzeng.com/v1
+#embedding_base_url: http://127.0.0.1:1234/v1 （if use LM Studio）
+embedding_dim: 4096
+
+language: zh
+
